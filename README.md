@@ -40,7 +40,7 @@ Inspired by the Hugging Face × NVIDIA post
 |---|---|---|
 | Router, chat, tool calls | [LiquidAI/LFM2.5-1.2B-Instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct) | vLLM :8010 |
 | Vision | [Qwen/Qwen2.5-VL-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) (or LFM2-VL) | vLLM :8011 |
-| Voice | [rumik-ai/rumik-oss-1](https://huggingface.co/rumik-ai/rumik-oss-1) (Ira), NVFP4 | vLLM :8004 + `tts_stream.py` :8003 |
+| Voice | [rumik-ai/rumik-oss-1](https://huggingface.co/rumik-ai/rumik-oss-1) (Ira), NVFP4 export: [Sanyam0605/rumik-oss-1-nvfp4-vllm](https://huggingface.co/Sanyam0605/rumik-oss-1-nvfp4-vllm) | vLLM :8004 + `tts_stream.py` :8003 |
 | Speech recognition | [openai/whisper-large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo) | in `web.py` |
 | Optional reasoner | NVIDIA Nemotron-3-Nano-30B-A3B (NVFP4) | vLLM :8012 |
 | Robot | [Reachy Mini SDK](https://github.com/pollen-robotics/reachy_mini) + MuJoCo sim | daemon :8000 |
@@ -68,10 +68,11 @@ near 100 tok/s before overhead. Batched throughput is much higher, so `tts_strea
    `/usr/lib/python3/dist-packages/{gi,cairo}` into the venv's `site-packages`.
 2. Docker image `vllm/vllm-openai:v0.20.0` (override with `VLLM_IMAGE`).
 3. Models: `hf download LiquidAI/LFM2.5-1.2B-Instruct`, `Qwen/Qwen2.5-VL-3B-Instruct`, `openai/whisper-large-v3-turbo`,
-   `rumik-ai/rumik-oss-1`, and `hf download --repo-type dataset pollen-robotics/reachy-mini-emotions-library`
-   (same for `-dances-library`). For NVFP4 rumik, export it with `quantize_for_vllm.py` from
-   [rumik-oss-model-dissection](https://github.com/Sj0605-DataSci/rumik-oss-model-dissection); for bf16, point
-   `RUMIK_MODEL_DIR` at the snapshot and set `RUMIK_QUANT=`.
+   and `hf download --repo-type dataset pollen-robotics/reachy-mini-emotions-library` (same for `-dances-library`).
+   Voice: `hf download Sanyam0605/rumik-oss-1-nvfp4-vllm --local-dir models/rumik-nvfp4` and set
+   `RUMIK_MODEL_DIR=models/rumik-nvfp4` (NVFP4 needs a Blackwell GPU such as the GB10; it was exported with
+   `quantize_for_vllm.py` from [rumik-oss-model-dissection](https://github.com/Sj0605-DataSci/rumik-oss-model-dissection)).
+   On other GPUs use bf16 `rumik-ai/rumik-oss-1` and set `RUMIK_QUANT=`.
 4. On a GB10, cap clocks before heavy jobs: `sudo nvidia-smi -lgc 0,1500`.
 
 ## Run (one tmux window each)

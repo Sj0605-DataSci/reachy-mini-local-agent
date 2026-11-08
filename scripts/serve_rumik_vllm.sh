@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # rumik-oss-1 on vLLM (OpenAI API, :8004) with the TinyAya out-of-tree plugin (./vllm-plugin).
-#   RUMIK_MODEL_DIR  local model dir (default: NVFP4 export; make it with quantize_for_vllm.py from
-#                    https://github.com/Sj0605-DataSci/rumik-oss-model-dissection, or point at the bf16 snapshot)
+#   RUMIK_MODEL_DIR  local model dir, e.g. hf download Sanyam0605/rumik-oss-1-nvfp4-vllm --local-dir models/rumik-nvfp4
+#                    (or the bf16 rumik-ai/rumik-oss-1 snapshot with RUMIK_QUANT=)
 #   RUMIK_QUANT      modelopt_fp4 (default) or "" for bf16
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
