@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reachy Live</title>
+<style>
+:root{--bg:#0f1115;--panel:#181b22;--line:#2a2f3a;--text:#e8eaf0;--muted:#8a91a0;--accent:#5b8cff;--rec:#ff5b6b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,sans-serif}
+main{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;padding:14px;height:100vh}
+@media(max-width:900px){main{grid-template-columns:1fr;height:auto}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.sim img{width:100%;height:100%;object-fit:contain;background:#000}
+.side{gap:14px;background:none;border:0}
+video{width:100%;max-height:220px;object-fit:cover;background:#000;transform:scaleX(-1)}
+#log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:200px}
+.m{padding:8px 11px;border-radius:10px;max-width:90%}.u{align-self:flex-end;background:#243049}.r{align-self:flex-start;background:#22262f}
+.meta{font-size:12px;color:var(--muted)}
+.bar{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);align-items:center;flex-wrap:wrap}
+button{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:10px 14px;font-weight:600;cursor:pointer}
+button.ghost{background:#2a2f3a}button.rec{background:var(--rec)}
+input[type=text]{flex:1;min-width:120px;background:#0f1115;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:9px}
+#status{font-size:13px;color:var(--muted);padding:0 12px 8px}
+</style></head><body>
+<main>
+  <div class="card sim"><img src="/stream" alt="Reachy simulation"></div>
+  <div class="card side">
+    <div class="card"><video id="cam" autoplay muted playsinline></video></div>
+    <div class="card" style="flex:1">
+      <div id="log"></div>
+      <div id="eyes" class="meta" style="padding:0 12px"></div>
+      <div id="status">Click "Start" to allow camera + mic.</div>
+      <div class="bar">
+        <button id="start">Start</button>
+        <button id="ptt" class="ghost" disabled>Hold to talk (Space)</button>
+        <button id="hf" class="ghost" disabled>Hands-free: off</button>
+        <input id="txt" type="text" placeholder="or type…"><button id="send" class="ghost">Send</button>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id), log=$("log"), st=$("status");
+let ctx, chunks=[], recording=false, busy=false, handsFree=false, speaking=false, silentMs=0, voiced=0;
+const SR=16000;
+const mode=m=>fetch("/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:m})}).catch(()=>{});
+
+function add(cls, text, meta){const d=document.createElement("div");d.className="m "+cls;d.textContent=text;
+  if(meta){const s=document.createElement("div");s.className="meta";s.textContent=meta;d.appendChild(s)}
+  log.appendChild(d);log.scrollTop=1e9}
+
+$("start").onclick=async()=>{
+  const ms=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480},
+    audio:{echoCancellation:true,noiseSuppression:true,channelCount:1}});
+  $("cam").srcObject=ms;
+  ctx=new AudioContext({sampleRate:SR});
+  const src=ctx.createMediaStreamSource(ms), proc=ctx.createScriptProcessor(2048,1,1);
+  src.connect(proc);proc.connect(ctx.destination);
+  proc.onaudioprocess=e=>{
+    const x=e.inputBuffer.getChannelData(0);
+    if(recording) chunks.push(new Float32Array(x));
+    if(!handsFree||busy||speaking) return;
+    let rms=0;for(const v of x) rms+=v*v; rms=Math.sqrt(rms/x.length);
+    const ms_=x.length/SR*1000;
+    if(rms>0.02){ if(!recording){recording=true;chunks=[new Float32Array(x)];voiced=0;st.textContent="listening…";mode("listening")} voiced+=ms_;silentMs=0 }
+    else if(recording){ silentMs+=ms_; if(silentMs>900){recording=false; if(voiced>300) send(); else {chunks=[];mode("idle")}} }
+  };
+  setInterval(async()=>{const v=$("cam");if(!v.videoWidth)return;const c=document.createElement("canvas");c.width=320;c.height=240;
+    c.getContext("2d").drawImage(v,0,0,320,240);const b=await new Promise(r=>c.toBlob(r,"image/jpeg",.7));
+    fetch("/frame",{method:"POST",body:b}).catch(()=>{})},330);
+  setInterval(async()=>{try{const s=await (await fetch("/scene")).json();$("eyes").textContent=s.scene?("👀 "+s.scene):""}catch(e){}},3000);
+  $("start").disabled=true;$("ptt").disabled=false;$("hf").disabled=false;
+  st.textContent="Ready. Hold the button or Space to talk.";
+};
+
+function wav(){let n=chunks.reduce((a,c)=>a+c.length,0),b=new ArrayBuffer(44+n*2),v=new DataView(b),o=0;
+  const w=s=>{for(const c of s)v.setUint8(o++,c.charCodeAt(0))};
+  w("RIFF");v.setUint32(o,36+n*2,true);o+=4;w("WAVEfmt ");v.setUint32(o,16,true);o+=4;v.setUint16(o,1,true);o+=2;
+  v.setUint16(o,1,true);o+=2;v.setUint32(o,SR,true);o+=4;v.setUint32(o,SR*2,true);o+=4;v.setUint16(o,2,true);o+=2;
+  v.setUint16(o,16,true);o+=2;w("data");v.setUint32(o,n*2,true);o+=4;
+  for(const c of chunks)for(const s of c){v.setInt16(o,Math.max(-1,Math.min(1,s))*32767,true);o+=2}
+  chunks=[];return b}
+const b64=buf=>{let s="",u=new Uint8Array(buf);for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode(...u.subarray(i,i+32768));return btoa(s)};
+
+function frame(){const v=$("cam");if(!v.videoWidth)return null;const c=document.createElement("canvas");
+  c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0);return c.toDataURL("image/jpeg",.8).split(",")[1]}
+
+async function playStream(url){
+  speaking=true; st.textContent="speaking…";
+  const res=await fetch(url), sr=+res.headers.get("X-Sample-Rate")||24000, rd=res.body.getReader();
+  const out=new AudioContext(); let t=out.currentTime+0.05, rest=new Uint8Array(0), first=true;
+  for(;;){const {done,value}=await rd.read(); if(done)break;
+    let u=new Uint8Array(rest.length+value.length); u.set(rest); u.set(value,rest.length);
+    const n=u.length>>1; rest=u.slice(n*2); if(!n) continue;
+    const i16=new Int16Array(u.buffer.slice(0,n*2)), f=new Float32Array(n); for(let k=0;k<n;k++) f[k]=i16[k]/32768;
+    const buf=out.createBuffer(1,n,sr); buf.copyToChannel(f,0);
+    const src=out.createBufferSource(); src.buffer=buf; src.connect(out.destination);
+    if(first){t=out.currentTime+0.6; first=false} t=Math.max(t,out.currentTime); src.start(t); t+=buf.duration;}
+  await new Promise(r=>setTimeout(r,Math.max(0,(t-out.currentTime)*1000)));
+  out.close(); speaking=false; st.textContent="Ready.";
+}
+
+async function send(text){
+  if(busy) return; busy=true; st.textContent="thinking…";
+  const body={image:frame()}; if(text){body.text=text}else{body.audio=b64(wav())}
+  try{
+    const r=await (await fetch("/talk",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json();
+    if(!r.user){st.textContent="didn't catch that";mode("idle");return}
+    add("u",r.user); add("r",r.reply,`${r.route}${r.emotion&&r.emotion!=="none"?" · feels "+r.emotion:""} · brain ${r.t_brain}s`);
+    if(r.speech) await playStream("/speech/"+r.speech);
+  }catch(e){st.textContent="error: "+e}finally{busy=false}
+}
+
+const down=()=>{if(busy||!ctx)return;ctx.resume();recording=true;chunks=[];$("ptt").classList.add("rec");st.textContent="recording…";mode("listening")};
+const up=()=>{if(!recording||handsFree)return;recording=false;$("ptt").classList.remove("rec");send()};
+$("ptt").onpointerdown=down;$("ptt").onpointerup=up;$("ptt").onpointerleave=up;
+addEventListener("keydown",e=>{if(e.code==="Space"&&document.activeElement!==$("txt")&&!e.repeat){e.preventDefault();down()}});
+addEventListener("keyup",e=>{if(e.code==="Space"&&document.activeElement!==$("txt")){e.preventDefault();up()}});
+$("hf").onclick=()=>{handsFree=!handsFree;recording=false;chunks=[];$("hf").textContent="Hands-free: "+(handsFree?"on":"off");
+  $("hf").classList.toggle("ghost",!handsFree);st.textContent=handsFree?"Just talk — I'll listen.":"Ready."};
+$("send").onclick=()=>{const t=$("txt").value.trim();if(t){$("txt").value="";send(t)}};
+$("txt").onkeydown=e=>{if(e.key==="Enter")$("send").click()};
+</script></body></html>

@@ -1,0 +1,17 @@
+# Python 3.12. Install with uv:  uv pip install -r requirements.txt
+# reachy-mini's [mujoco] extra pulls pygobject; if it fails to build (no cairo headers), install reachy-mini --no-deps
+# plus its deps minus pygobject/gstreamer, and symlink the system python3-gi into the venv (see README).
+reachy-mini[mujoco]>=1.14
+mujoco
+torch
+transformers>=4.57
+fastapi
+uvicorn
+openai
+requests
+aiohttp
+numpy
+pillow
+opencv-python>=5
+ddgs
+sounddevice

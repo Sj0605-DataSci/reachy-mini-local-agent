@@ -1,0 +1,7 @@
+out/
+__pycache__/
+*.egg-info/
+*.wav
+*.mp4
+*.mov
+.env
