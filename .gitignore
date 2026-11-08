@@ -6,3 +6,5 @@ __pycache__/
 *.mov
 .env
 models/
+!assets/
+!assets/*

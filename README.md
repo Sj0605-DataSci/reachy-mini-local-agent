@@ -8,6 +8,12 @@ Inspired by the Hugging Face × NVIDIA post
 [“NVIDIA brings agents to life with DGX Spark and Reachy Mini”](https://huggingface.co/blog/nvidia-reachy-mini)
 ([reference repo](https://github.com/brevdev/reachy-personal-assistant)), rebuilt with **small open models only, no cloud APIs**.
 
+## Demo
+[![Reachy Mini local agent demo](assets/demo.gif)](assets/demo.mp4)
+
+▶️ **[Watch the full demo with sound (MP4, 31 s)](assets/demo.mp4)**: greeting, describing what it sees through the
+webcam, and a web-search hand-off, with the robot reacting in the MuJoCo sim.
+
 ```
  Mac browser (camera + mic)  ──ssh tunnel :8090──►  DGX Spark
    │ push-to-talk / hands-free                        │
