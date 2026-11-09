@@ -17,6 +17,24 @@ STATE = "http://localhost:8000/api/state/full?with_head_joints=true"
 W, H, FPS = 640, 480, 25
 frame = b""
 lock = threading.Lock()
+CAM = {"az": None, "el": None, "dist": None, "home": None}  # live orbit camera, changed via /cam
+
+
+def apply_cam(cam):
+    """Seed CAM from the renderer's defaults once, then follow CAM every frame."""
+    if CAM["home"] is None:
+        CAM["home"] = (cam.azimuth, cam.elevation, cam.distance)
+        CAM["az"], CAM["el"], CAM["dist"] = CAM["home"]
+    cam.azimuth, cam.elevation, cam.distance = CAM["az"], CAM["el"], CAM["dist"]
+
+
+def move_cam(q: dict):
+    if CAM["home"] is None: return
+    if "reset" in q:
+        CAM["az"], CAM["el"], CAM["dist"] = CAM["home"]; return
+    CAM["az"] = (CAM["az"] + float(q.get("daz", 0))) % 360
+    CAM["el"] = max(-89.0, min(10.0, CAM["el"] + float(q.get("del", 0))))
+    CAM["dist"] = max(0.2, min(3.0, CAM["dist"] * float(q.get("zoom", 1))))
 
 
 def render_loop():
@@ -37,6 +55,7 @@ def _render():
     mujoco.mjv_defaultFreeCamera(m, cam)
     cam.distance, cam.elevation, cam.azimuth = 0.55, -15, 160
     cam.lookat[:] = [0, 0, 0.18]
+    apply_cam(cam)
     while True:
         t0 = time.time()
         try:
@@ -49,6 +68,7 @@ def _render():
             pass
         for _ in range(int(1 / FPS / m.opt.timestep)):  # let the closed-chain linkage settle on actuator targets
             mujoco.mj_step(m, d)
+        apply_cam(cam)
         r.update_scene(d, cam)
         buf = io.BytesIO()
         Image.fromarray(r.render()).save(buf, "JPEG", quality=80)
@@ -65,6 +85,10 @@ class H_(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
     def do_GET(self):
+        if self.path.startswith("/cam"):
+            from urllib.parse import parse_qs, urlparse
+            move_cam({k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()})
+            self.send_response(204); self.end_headers(); return
         if self.path != "/stream":
             self.send_response(200); self.send_header("Content-Type", "text/html"); self.end_headers()
             self.wfile.write(PAGE); return

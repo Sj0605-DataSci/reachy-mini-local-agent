@@ -20,7 +20,8 @@ input[type=text]{flex:1;min-width:120px;background:#0f1115;border:1px solid var(
 #status{font-size:13px;color:var(--muted);padding:0 12px 8px}
 </style></head><body>
 <main>
-  <div class="card sim"><img src="/stream" alt="Reachy simulation"></div>
+  <div class="card sim" style="position:relative"><img id="simimg" src="/stream" alt="Robot simulation" draggable="false" style="cursor:grab;touch-action:none;user-select:none">
+    <div class="meta" style="position:absolute;left:10px;bottom:8px;background:#0008;padding:3px 8px;border-radius:6px">drag to rotate · scroll to zoom · double-click to reset</div></div>
   <div class="card side">
     <div class="card"><video id="cam" autoplay muted playsinline></video></div>
     <div class="card" style="flex:1">
@@ -40,6 +41,17 @@ input[type=text]{flex:1;min-width:120px;background:#0f1115;border:1px solid var(
 const $=id=>document.getElementById(id), log=$("log"), st=$("status");
 let ctx, chunks=[], recording=false, busy=false, handsFree=false, speaking=false, silentMs=0, voiced=0;
 const SR=16000;
+// sim view camera: drag = orbit, wheel = zoom, dblclick = reset (rendered server-side, so we send deltas)
+(()=>{const im=$("simimg"); let drag=null, acc={daz:0,del:0,zoom:1}, pending=false;
+  const flush=()=>{pending=false; const q=new URLSearchParams({daz:acc.daz.toFixed(1),del:acc.del.toFixed(1),zoom:acc.zoom.toFixed(3)});
+    acc={daz:0,del:0,zoom:1}; fetch("/cam?"+q).catch(()=>{})};
+  const queue=()=>{if(!pending){pending=true;setTimeout(flush,50)}};
+  im.addEventListener("pointerdown",e=>{drag={x:e.clientX,y:e.clientY};im.setPointerCapture(e.pointerId);im.style.cursor="grabbing"});
+  im.addEventListener("pointermove",e=>{if(!drag)return; acc.daz-=(e.clientX-drag.x)*0.4; acc.del-=(e.clientY-drag.y)*0.3;
+    drag={x:e.clientX,y:e.clientY}; queue()});
+  const end=()=>{drag=null;im.style.cursor="grab"}; im.addEventListener("pointerup",end); im.addEventListener("pointercancel",end);
+  im.addEventListener("wheel",e=>{e.preventDefault(); acc.zoom*=Math.exp(e.deltaY*0.001); queue()},{passive:false});
+  im.addEventListener("dblclick",()=>fetch("/cam?reset=1").catch(()=>{}));})();
 const mode=m=>fetch("/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:m})}).catch(()=>{});
 
 function add(cls, text, meta){const d=document.createElement("div");d.className="m "+cls;d.textContent=text;

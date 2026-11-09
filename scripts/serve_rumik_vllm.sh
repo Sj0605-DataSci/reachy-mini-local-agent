@@ -13,5 +13,5 @@ exec docker run --rm --gpus all --ipc=host -p 8004:8004 \
   -e VLLM_PLUGINS=register_tinyaya -e VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 \
   --entrypoint bash ${VLLM_IMAGE:-vllm/vllm-openai:v0.20.0} -c "pip install -q -e /workspace/vllm-plugin && \
   vllm serve $SNAP --served-model-name rumik --port 8004 --trust-remote-code \
-  ${QUANT:+--quantization $QUANT} --dtype bfloat16 --gpu-memory-utilization 0.15 \
+  ${QUANT:+--quantization $QUANT} --dtype bfloat16 --gpu-memory-utilization 0.20 \
   --max-model-len 4096 --max-num-seqs 4"

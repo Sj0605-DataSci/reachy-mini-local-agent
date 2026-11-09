@@ -20,8 +20,14 @@ from agent import EXPRESS, Brain, Robot, clean_reply, voice_style
 from life import Life
 
 app = FastAPI()
-robot = Robot(True)
-life = Life(robot.mini)
+import os
+if os.environ.get("ROBOT", "reachy") == "duck":   # Pollen Microduck (scripts/duck-sim) instead of Reachy Mini
+    from duck_robot import DuckLife, DuckRobot
+    robot = DuckRobot(True)
+    life = DuckLife(robot)
+else:
+    robot = Robot(True)
+    life = Life(robot.mini)
 robot.life = life
 if robot.mini: life.gesture(robot.wake_up)
 brain = Brain(robot)
@@ -162,6 +168,16 @@ async def stream():
     return StreamingResponse(gen(), media_type="multipart/x-mixed-replace; boundary=f")
 
 
+@app.get("/cam")
+def cam(request: Request):
+    """Orbit/zoom the sim view: forwarded to the renderer process."""
+    try:
+        requests.get("http://localhost:8091/cam?" + str(request.url.query), timeout=1)
+    except requests.RequestException:
+        pass
+    return Response(status_code=204)
+
+
 @app.get("/scene")
 def scene():
     return {"scene": brain.scene, "mode": life.mode}
@@ -174,5 +190,6 @@ def index():
 
 if __name__ == "__main__":
     import subprocess
-    subprocess.Popen([sys.executable, str(Path(__file__).parent / "viewer.py"), "8091"])  # isolated renderer
+    view = "duck_viewer.py" if os.environ.get("ROBOT", "reachy") == "duck" else "viewer.py"
+    subprocess.Popen([sys.executable, str(Path(__file__).parent / view), "8091"])  # isolated renderer
     uvicorn.run(app, host="0.0.0.0", port=8090, log_level="warning")

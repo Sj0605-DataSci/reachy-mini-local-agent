@@ -30,6 +30,33 @@ webcam, and a web-search hand-off, with the robot reacting in the MuJoCo sim.
                                                       └─ Reachy Mini daemon (MuJoCo sim)
 ```
 
+## Microduck too
+The same brain also drives Pollen's **[Microduck](https://pollen-robotics.com/microduck/)**, the 25 cm open-source
+biped duck, in its MuJoCo simulator: `ROBOT=duck python web.py`.
+
+[![Microduck demo](assets/duck_demo.gif)](assets/duck_demo.mp4)
+
+▶️ **[Full Microduck demo with voice (MP4, 1:42)](assets/duck_demo.mp4)**: greet, sit, stand, peck the floor, kick,
+look, nod, dance and chat, every action picked by LFM2.5 from a spoken-style request.
+
+| | Reachy Mini | Microduck |
+|---|---|---|
+| Control | Python SDK, direct head poses | JSON-RPC to `robotd` over a Unix socket; continuous intents streamed at 20 Hz (500 ms deadman) |
+| Agent tools | look, tilt, nod, shake, express (85 emotions), dance (19), sleep, wake | sit, stand, peck (`ground_pick`), kick, look, nod, shake, quack, emote (13 trained emotions), dance |
+| Live motion | breathing, face-follow, listening/thinking poses, speech-synced head + antennas | idle bob, face-follow, listening/thinking poses, head bob + beak with the voice |
+| Sim view | `viewer.py` | `duck_viewer.py` mirrors robotd's 14 joints + odometry into an offscreen render |
+
+Setup: build [pollen-robotics/microduck](https://github.com/pollen-robotics/microduck) (`cargo build -p robotd -p robotctl -p tof -p sounds -p configd -p updater`;
+the full workspace also needs GStreamer/glib headers for `mediad`), `uv sync` in
+[microduck_rl](https://github.com/pollen-robotics/microduck_rl) (`develop`), then
+`DUCK_SIM_RL=/path/to/microduck_rl DUCK_SIM_VIEWER=0 scripts/duck-sim` from the microduck repo.
+
+Known limits in the sim on a DGX Spark: walking and turning do not track the command (Pollen's own `duck-sim drive`
+reports the same; see their `docs/design/simulation.md`, "Ways to pick the wrong model"), and the beak is not among the
+14 reported joints, so lip-sync shows as head motion. Sit/stand, peck, kicks and the emotion skills all move the body.
+
+The sim view in the browser can be orbited (drag), zoomed (scroll) and reset (double-click), for both robots.
+
 ## What it does
 - **Talks like a person**: casual persona, short replies, English / Hindi / Hinglish, `<laugh>` / `<sigh>` voiced by rumik.
 - **Sees you**: YuNet face tracking → Reachy follows your face; every ~6 s the VLM captions the scene and the persona can
@@ -102,7 +129,9 @@ Text-only CLI: `python agent.py` (add `--mic` for a local mic, `--no-robot` with
 | `agent.py` | router, LLM chat, tool-calling agent, vision, web search, emotion picker, reply clean-up |
 | `life.py` | 20 Hz motion loop that owns the robot: modes, face-follow, speech-synced motion, recorded moves |
 | `tts_stream.py` | phrase-parallel streaming TTS on top of rumik-on-vLLM |
-| `viewer.py` | offscreen MuJoCo render of the live robot state as MJPEG (no X needed over SSH) |
+| `viewer.py` | offscreen MuJoCo render of the live robot state as MJPEG (no X needed over SSH), orbit camera via `/cam` |
+| `duck_robot.py` / `duck_viewer.py` | Microduck adapter (robotd JSON-RPC, tools, motion loop) and its sim view |
+| `scripts/record_demo.py` | scripted demo recorder: sim stream + streamed voice → captioned MP4 |
 | `vllm-plugin/` | out-of-tree vLLM model plugin for rumik-oss-1 (TinyAya) |
 | `scripts/` | launchers for the sim and each model server |
 

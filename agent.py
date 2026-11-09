@@ -162,9 +162,9 @@ TOOLS = [
 ]
 
 
-def tool_schemas():
+def tool_schemas(tools=None):
     out = []
-    for name, desc, params in TOOLS:
+    for name, desc, params in (tools or TOOLS):
         props = {k: ({"type": t, "enum": e} if e else {"type": t}) for k, (t, e) in params.items()}
         out.append({"type": "function", "function": {"name": name, "description": desc,
                     "parameters": {"type": "object", "properties": props, "required": []}}})
@@ -236,7 +236,7 @@ class Brain:
         self.scene = ""  # live caption of the user's camera, refreshed by web.py
         print(f"[brain] vlm={'on' if self.vlm else 'off'} reasoner={'on' if self.reasoner else 'off (LFM fallback)'}")
 
-    MOVE_WORDS = re.compile(r"\b(nod|shake|look|turn|tilt|dance|antenna|wiggle|move|sleep|wake|head|happy|sad|excited|curious)\b", re.I)
+    MOVE_WORDS = re.compile(r"\b(nod|shake|look|turn|tilt|dance|antenna|wiggle|move|sleep|wake|head|happy|sad|excited|curious|walk|sit|stand|kick|peck|quack|pick|grab|fetch|come here|go)\b", re.I)
     KNOW_WORDS = re.compile(r"(what do you know|do you know (about|of)|tell me about|heard (of|about)|who (is|was|are)|what is|what's|"
                             r"latest|news|today|current|price|weather|score|when (is|did|was)|where is|how much|how many|app\b|company)", re.I)
     SEE_WORDS = re.compile(r"\b(see|seeing|holding|camera|wearing|read this|in front of)\b", re.I)
@@ -279,7 +279,7 @@ class Brain:
         return r.choices[0].message.content.strip()
 
     def persona(self) -> str:
-        return PERSONA + (f" Through your camera you currently see: {self.scene}. Mention it only when it's natural "
+        return getattr(self.robot, "PERSONA", PERSONA) + (f" Through your camera you currently see: {self.scene}. Mention it only when it's natural "
                           "(e.g. notice their smile, their mug, if they look tired)." if self.scene else "")
 
     def describe(self, image: bytes) -> str:
@@ -312,9 +312,9 @@ class Brain:
         msgs = [{"role": "system", "content": self.persona() + " Use tools to move. You may call several tools."},
                 {"role": "user", "content": text}]
         done = []
-        for _ in range(3):  # max tool rounds
+        for _ in range(2):  # one tool round, then react (small models repeat calls if looped)
             r = self.llm.chat.completions.create(
-                model=LLM[1], messages=msgs, tools=tool_schemas(), tool_choice="none", temperature=0.1,
+                model=LLM[1], messages=msgs, tools=tool_schemas(getattr(self.robot, "TOOLS", TOOLS)), tool_choice="none", temperature=0.1,
                 max_tokens=200, extra_body={"skip_special_tokens": False})
             raw = r.choices[0].message.content or ""
             calls, said = parse_lfm_calls(raw)
@@ -324,9 +324,12 @@ class Brain:
                                      "React naturally in one short sentence, don't list what you did.)", max_tokens=50)
                 return said or "Hmm, I'm not sure how to do that."
             msgs.append({"role": "assistant", "content": raw})
-            for name, args in calls:
+            uniq = []
+            for c in calls:
+                if c not in uniq: uniq.append(c)
+            for name, args in uniq:
                 fn = getattr(self.robot, name, None)
-                if not (fn and name in {t[0] for t in TOOLS}):
+                if not (fn and name in {t[0] for t in getattr(self.robot, "TOOLS", TOOLS)}):
                     res = f"unknown tool {name}"
                 elif self.robot.life and name not in ("express", "dance"):
                     res = self.robot.life.gesture(fn, **args)
@@ -335,6 +338,8 @@ class Brain:
                 print(f"  [tool] {name}({args}) -> {res}")
                 done.append(name)
                 msgs.append({"role": "tool", "content": json.dumps({"result": res})})
+            return self.chat(f"{text}\n(You just did that with your body: {', '.join(dict.fromkeys(done))}. "
+                             "React naturally in one short sentence, don't list what you did.)", max_tokens=50)
         return "All done!"
 
     def see(self, text: str, image: bytes | None) -> str:
